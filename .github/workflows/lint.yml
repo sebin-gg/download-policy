@@ -1,0 +1,42 @@
+name: ci
+
+"on":
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - name: Official skill validator (skills-ref)
+        run: |
+          pip install --only-binary=:all: --require-hashes -r requirements-ci.txt
+          agentskills validate download-policy
+      - name: Lint skill
+        run: |
+          python - <<'PYEOF'
+          import re
+          from pathlib import Path
+
+          root = Path("download-policy")
+          text = (root / "SKILL.md").read_text(encoding="utf-8")
+          frontmatter = text.split("---")[1]
+          name = re.search(r"^name:\s*(\S+)", frontmatter, re.M).group(1)
+          assert name == root.name, f"name {name} != folder {root.name}"
+          assert "description:" in frontmatter, "description missing"
+          assert (root / "SKILL.md").stat().st_size > 0
+          version = re.search(r'^\s*version:\s*["'"'"']?([^\s"'"'"']+)',
+                              frontmatter, re.M).group(1)
+          changelog = Path("CHANGELOG.md").read_text(encoding="utf-8")
+          assert f"[{version}]" in changelog,               f"CHANGELOG has no entry for version {version}"
+          print("skill lint ok")
+          PYEOF
